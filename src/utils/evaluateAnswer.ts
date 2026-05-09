@@ -20,25 +20,21 @@ export function evaluateAnswer(
   const allPlaced = placements.length === element.z && placements.every((p) => p !== null)
   if (!allPlaced) reasons.push('reason_wrongElectrons')
   else {
-    // Validate distribution across shells, not exact angular positions.
-    // Students can place electrons anywhere on a shell; only the shell counts matter.
-    const expectedCounts = element.shellCounts
-    const maxShell = Math.max(expectedCounts.length, shellCount)
-    const placedCounts = Array.from({ length: maxShell }, () => 0)
-
-    for (const p of placements) {
-      if (!p) continue
-      if (p.shellIndex < 0 || p.shellIndex >= maxShell) {
-        reasons.push('reason_wrongElectrons')
-        break
-      }
-      placedCounts[p.shellIndex]++
-    }
-
-    if (!reasons.includes('reason_wrongElectrons')) {
-      for (let i = 0; i < maxShell; i++) {
-        const expectedInShell = expectedCounts[i] ?? 0
-        if (placedCounts[i] !== expectedInShell) {
+    // Enforce the quiz pattern:
+    // - Shell 0 (K): singles spaced out (e.g. 2 electrons opposite).
+    // - Shell 1+ (L/M/N…): electrons appear as pairs.
+    // This is represented by `element.templateSlots` (shell + snap angle).
+    const key = (p: ElectronSlot) => `${p.shellIndex}:${p.angleDeg}`
+    const expected = element.templateSlots.slice(0, element.z).map(key).sort()
+    const yours = placements
+      .filter((p): p is ElectronSlot => p !== null)
+      .map(key)
+      .sort()
+    if (expected.length !== yours.length) {
+      reasons.push('reason_wrongElectrons')
+    } else {
+      for (let i = 0; i < expected.length; i++) {
+        if (expected[i] !== yours[i]) {
           reasons.push('reason_wrongElectrons')
           break
         }

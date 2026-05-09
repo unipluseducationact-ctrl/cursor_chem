@@ -44,11 +44,77 @@ function preferredOrderForAngles(angles: number[]): number[] {
   return ordered
 }
 
+/** Nearest discrete quiz angle (degrees) on a shell for a target direction. */
+function nearestValidAngle(shellIndex: number, targetDeg: number): number {
+  const valid = validAnglesForShell(shellIndex)
+  const t = ((targetDeg % 360) + 360) % 360
+  let best = valid[0]!
+  let bestD = Infinity
+  for (const a of valid) {
+    const d = Math.abs(((a - t + 180) % 360) - 180)
+    if (d < bestD) {
+      bestD = d
+      best = a
+    }
+  }
+  return best
+}
+
+/** Two distinct snap angles near a pair centre (for paired electrons on L/M/N… shells). */
+function pairAnglesAt(shellIndex: number, centerDeg: number, spreadDeg: number): [number, number] {
+  const valid = validAnglesForShell(shellIndex)
+  let a1 = nearestValidAngle(shellIndex, centerDeg - spreadDeg)
+  let a2 = nearestValidAngle(shellIndex, centerDeg + spreadDeg)
+  if (a1 !== a2) return [a1, a2]
+  const i = valid.indexOf(a1)
+  if (i >= 0 && valid.length > 1) {
+    a2 = valid[(i + 1) % valid.length]!
+  }
+  return [a1, a2]
+}
+
+/**
+ * Shell 0 (K): keep even / preferred fill (not required to show as pairs).
+ * Shell 1+ (L, M, N…): answer template shows electrons in pairs (2 per pair), except any single leftover.
+ */
+function pairedAnglesForOuterShell(shellIndex: number, count: number): number[] {
+  if (count <= 0) return []
+  const spreadDeg = 11
+  const nPairs = Math.floor(count / 2)
+  const nSingles = count % 2
+  const segments = nPairs + nSingles
+  const step = 360 / segments
+  const out: number[] = []
+  let seg = 0
+  for (let i = 0; i < nPairs; i++) {
+    const center = seg * step
+    seg++
+    const [x, y] = pairAnglesAt(shellIndex, center, spreadDeg)
+    out.push(x, y)
+  }
+  for (let i = 0; i < nSingles; i++) {
+    const center = seg * step
+    seg++
+    out.push(nearestValidAngle(shellIndex, center))
+  }
+  return out.slice(0, count)
+}
+
 function anglesForShell(shellIndex: number, count: number): number[] {
   if (count <= 0) return []
-  const all = validAnglesForShell(shellIndex)
-  const order = preferredOrderForAngles(all)
-  return order.slice(0, Math.min(count, all.length))
+  if (shellIndex === 0) {
+    const all = validAnglesForShell(0)
+    // Rule enforcement: when there are 2 electrons in the first shell,
+    // they must be as far apart as possible (opposite on the ring).
+    if (count === 2) {
+      const want = [0, 180]
+      const set = new Set(all.map((a) => ((a % 360) + 360) % 360))
+      if (set.has(0) && set.has(180)) return want
+    }
+    const order = preferredOrderForAngles(all)
+    return order.slice(0, Math.min(count, all.length))
+  }
+  return pairedAnglesForOuterShell(shellIndex, count)
 }
 
 export function shellCountsToSlots(shellCounts: number[]): ElectronSlot[] {
